@@ -79,7 +79,7 @@ $dataWithSignature = WertScSigner::signSmartContractData($options, $privateKey);
 
 ### Private key
 
-Was given to you during your registration in the **Wert** system as a partner. If you don't have one, [contact us](https://wert.io/for-partners).
+Was given to you during your registration in the **Wert** system as a partner. If you don't have one, [contact Wert](https://wert.io/for-partners).
 
 ## Requirements
 
