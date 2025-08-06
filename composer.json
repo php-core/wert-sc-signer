@@ -1,0 +1,40 @@
+{
+    "name": "php-core/wert-sc-signer",
+    "version": "1.0.0",
+    "description": "PHP library for SmartContracts Wert's requests signing simplification",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "PHPCore\\WertScSigner\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "PHPCore",
+            "email": "dev@php-core.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "php": ">=8.0",
+        "ext-sodium": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "illuminate/support": "^10.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "PHPCore\\WertScSigner\\Laravel\\WertScSignerServiceProvider"
+            ],
+            "aliases": {
+                "WertScSigner": "PHPCore\\WertScSigner\\Laravel\\Facades\\WertScSigner"
+            }
+        }
+    },
+    "scripts": {
+        "test": "./vendor/bin/phpunit"
+    }
+}
