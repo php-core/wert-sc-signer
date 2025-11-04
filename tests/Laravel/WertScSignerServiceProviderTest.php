@@ -6,6 +6,7 @@ namespace PHPCore\WertScSigner\Tests\Laravel;
 
 use PHPUnit\Framework\TestCase;
 use PHPCore\WertScSigner\WertScSigner;
+use PHPCore\WertScSigner\Laravel\CredentialManager;
 
 class WertScSignerServiceProviderTest extends TestCase
 {
@@ -34,10 +35,44 @@ class WertScSignerServiceProviderTest extends TestCase
         );
     }
 
+    public function testCredentialManagerExists(): void
+    {
+        $this->assertTrue(
+            class_exists('PHPCore\WertScSigner\Laravel\CredentialManager')
+        );
+    }
+
     public function testConfigFileExists(): void
     {
         $this->assertFileExists(
             __DIR__ . '/../../src/Laravel/config/wert-sc-signer.php'
         );
+    }
+
+    public function testConfigFileStructure(): void
+    {
+        // Read the config file as text to verify structure without executing env()
+        $configContent = file_get_contents(__DIR__ . '/../../src/Laravel/config/wert-sc-signer.php');
+
+        // Verify key configuration keys are present in the file
+        $this->assertStringContainsString("'private_key'", $configContent);
+        $this->assertStringContainsString("'credentials'", $configContent);
+        $this->assertStringContainsString("'default_credential'", $configContent);
+        $this->assertStringContainsString('WERT_PRIVATE_KEY', $configContent);
+        $this->assertStringContainsString('WERT_DEFAULT_CREDENTIAL', $configContent);
+    }
+
+    public function testCredentialManagerCanBeInstantiatedWithConfig(): void
+    {
+        // Test that CredentialManager works with config-like data
+        $mockConfig = [
+            'default' => 'test_key_123',
+            'production' => 'prod_key_456',
+        ];
+
+        $manager = new CredentialManager($mockConfig, 'default');
+
+        $this->assertEquals('test_key_123', $manager->get('default'));
+        $this->assertEquals('prod_key_456', $manager->get('production'));
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PHPCore\WertScSigner\Tests;
 
 use PHPCore\WertScSigner\WertScSigner;
+use PHPCore\WertScSigner\Laravel\CredentialManager;
 use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 
@@ -165,5 +166,169 @@ class WertScSignerTest extends TestCase
         // Also test without 0x prefix to ensure handling is correct
         $result3 = WertScSigner::signSmartContractData($options, substr($privateKey, 2));
         $this->assertEquals($result['signature'], $result3['signature']);
+    }
+
+    // Multi-credential tests
+
+    public function testConstructorWithoutCredentialManager(): void
+    {
+        $signer = new WertScSigner();
+
+        $this->assertInstanceOf(WertScSigner::class, $signer);
+    }
+
+    public function testConstructorWithCredentialManager(): void
+    {
+        $credentialManager = new CredentialManager(['default' => self::TEST_PRIVATE_KEY], 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        $this->assertInstanceOf(WertScSigner::class, $signer);
+    }
+
+    public function testWithCredentialReturnsNewInstance(): void
+    {
+        $credentialManager = new CredentialManager(['default' => self::TEST_PRIVATE_KEY], 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        $newSigner = $signer->withCredential('production');
+
+        $this->assertInstanceOf(WertScSigner::class, $newSigner);
+        $this->assertNotSame($signer, $newSigner);
+    }
+
+    public function testSignWithCredentialManager(): void
+    {
+        $credentials = [
+            'default' => self::TEST_PRIVATE_KEY,
+            'production' => '987654321fedcba987654321fedcba987654321fedcba987654321fedcba9876',
+        ];
+
+        $credentialManager = new CredentialManager($credentials, 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        // Sign with default credential
+        $result1 = $signer->sign(self::VALID_OPTIONS);
+        $this->assertArrayHasKey('signature', $result1);
+
+        // Sign with specific credential
+        $result2 = $signer->sign(self::VALID_OPTIONS, 'production');
+        $this->assertArrayHasKey('signature', $result2);
+
+        // Signatures should be different because they use different keys
+        $this->assertNotEquals($result1['signature'], $result2['signature']);
+    }
+
+    public function testSignWithSelectedCredential(): void
+    {
+        $credentials = [
+            'default' => self::TEST_PRIVATE_KEY,
+            'production' => '987654321fedcba987654321fedcba987654321fedcba987654321fedcba9876',
+        ];
+
+        $credentialManager = new CredentialManager($credentials, 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        // Use withCredential to select a credential
+        $result = $signer->withCredential('production')->sign(self::VALID_OPTIONS);
+
+        $this->assertArrayHasKey('signature', $result);
+
+        // Should match signing with production credential directly
+        $result2 = $signer->sign(self::VALID_OPTIONS, 'production');
+        $this->assertEquals($result['signature'], $result2['signature']);
+    }
+
+    public function testSignWithDirectPrivateKey(): void
+    {
+        $credentialManager = new CredentialManager(['default' => 'wrong_key'], 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        // Direct private key should override credential manager
+        $result = $signer->sign(self::VALID_OPTIONS, null, self::TEST_PRIVATE_KEY);
+
+        $this->assertArrayHasKey('signature', $result);
+
+        // Should match static method result
+        $expected = WertScSigner::signSmartContractData(self::VALID_OPTIONS, self::TEST_PRIVATE_KEY);
+        $this->assertEquals($expected['signature'], $result['signature']);
+    }
+
+    public function testSignWithoutCredentialManagerThrowsException(): void
+    {
+        $signer = new WertScSigner(); // No credential manager
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $signer->sign(self::VALID_OPTIONS);
+    }
+
+    public function testSignWithNonExistentCredentialThrowsException(): void
+    {
+        $credentialManager = new CredentialManager(['default' => self::TEST_PRIVATE_KEY], 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Credential 'nonexistent' is not configured");
+
+        $signer->sign(self::VALID_OPTIONS, 'nonexistent');
+    }
+
+    public function testWithCredentialDoesNotMutateOriginalInstance(): void
+    {
+        $credentials = [
+            'default' => self::TEST_PRIVATE_KEY,
+            'production' => '987654321fedcba987654321fedcba987654321fedcba987654321fedcba9876',
+        ];
+
+        $credentialManager = new CredentialManager($credentials, 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        // Create new instance with different credential
+        $productionSigner = $signer->withCredential('production');
+
+        // Original should still use default
+        $result1 = $signer->sign(self::VALID_OPTIONS);
+
+        // New instance should use production
+        $result2 = $productionSigner->sign(self::VALID_OPTIONS);
+
+        // Signatures should be different
+        $this->assertNotEquals($result1['signature'], $result2['signature']);
+    }
+
+    public function testChainedWithCredentialCalls(): void
+    {
+        $credentials = [
+            'default' => self::TEST_PRIVATE_KEY,
+            'production' => '987654321fedcba987654321fedcba987654321fedcba987654321fedcba9876',
+            'staging' => 'abcdef123456abcdef123456abcdef123456abcdef123456abcdef123456abcd',
+        ];
+
+        $credentialManager = new CredentialManager($credentials, 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        // Chain multiple withCredential calls
+        $result1 = $signer->withCredential('production')->sign(self::VALID_OPTIONS);
+        $result2 = $signer->withCredential('staging')->sign(self::VALID_OPTIONS);
+
+        // Each should produce different signatures
+        $this->assertNotEquals($result1['signature'], $result2['signature']);
+    }
+
+    public function testSignPreservesAllOriginalOptions(): void
+    {
+        $credentialManager = new CredentialManager(['default' => self::TEST_PRIVATE_KEY], 'default');
+        $signer = new WertScSigner($credentialManager);
+
+        $result = $signer->sign(self::VALID_OPTIONS);
+
+        // Verify all original keys are present
+        foreach (self::VALID_OPTIONS as $key => $value) {
+            $this->assertArrayHasKey($key, $result);
+            $this->assertEquals($value, $result[$key]);
+        }
+
+        // Verify signature is added
+        $this->assertArrayHasKey('signature', $result);
     }
 }

@@ -16,8 +16,19 @@ class WertScSignerServiceProvider extends ServiceProvider
             'wert-sc-signer'
         );
 
+        // Register the credential manager as a singleton
+        $this->app->singleton('wert-sc-signer.credentials', function ($app) {
+            $config = $app['config']['wert-sc-signer'];
+
+            return new CredentialManager(
+                $config['credentials'] ?? [],
+                $config['default_credential'] ?? 'default'
+            );
+        });
+
+        // Register the main service as a singleton
         $this->app->singleton('wert-sc-signer', function ($app) {
-            return new WertScSigner();
+            return new WertScSigner($app['wert-sc-signer.credentials']);
         });
     }
 

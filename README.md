@@ -42,6 +42,82 @@ $dataWithSignature = WertScSigner::signSmartContractData($options);
 
 Function **signSmartContractData** returns the given options array with an addition of a "**signature**" property. You can pass the result directly to WertWidget initializer.
 
+#### Using Multiple Credentials
+
+The package supports using multiple API credentials in the same Laravel project. This is useful when you need to:
+- Separate credentials by environment (production, staging, etc.)
+- Use different credentials for different partners or clients
+- Manage multiple Wert accounts
+
+**Configuration:**
+
+Update your `config/wert-sc-signer.php` file:
+
+```php
+return [
+    'private_key' => env('WERT_PRIVATE_KEY'), // Legacy support
+
+    'credentials' => [
+        'default' => env('WERT_PRIVATE_KEY'),
+        'production' => env('WERT_PRIVATE_KEY_PRODUCTION'),
+        'staging' => env('WERT_PRIVATE_KEY_STAGING'),
+        'partner_a' => env('WERT_PRIVATE_KEY_PARTNER_A'),
+        'partner_b' => env('WERT_PRIVATE_KEY_PARTNER_B'),
+    ],
+
+    'default_credential' => env('WERT_DEFAULT_CREDENTIAL', 'default'),
+];
+```
+
+Add the corresponding environment variables to your `.env` file:
+
+```env
+WERT_PRIVATE_KEY=your_default_key
+WERT_PRIVATE_KEY_PRODUCTION=your_production_key
+WERT_PRIVATE_KEY_STAGING=your_staging_key
+WERT_PRIVATE_KEY_PARTNER_A=partner_a_key
+WERT_PRIVATE_KEY_PARTNER_B=partner_b_key
+WERT_DEFAULT_CREDENTIAL=default
+```
+
+**Usage:**
+
+```php
+use PHPCore\WertScSigner\Laravel\Facades\WertScSigner;
+
+// Use the default credential (backward compatible)
+$dataWithSignature = WertScSigner::signSmartContractData($options);
+
+// Use a specific credential with withCredential()
+$dataWithSignature = WertScSigner::withCredential('production')->sign($options);
+$dataWithSignature = WertScSigner::withCredential('partner_a')->sign($options);
+
+// Or pass the credential name to the sign() method
+$dataWithSignature = WertScSigner::sign($options, 'staging');
+```
+
+**Dynamic Credential Selection:**
+
+You can select credentials dynamically based on your application logic:
+
+```php
+// Based on environment
+$credential = app()->environment('production') ? 'production' : 'staging';
+$dataWithSignature = WertScSigner::withCredential($credential)->sign($options);
+
+// Based on user/tenant
+$credential = $user->wert_credential_name ?? 'default';
+$dataWithSignature = WertScSigner::withCredential($credential)->sign($options);
+
+// Based on partner
+$credential = match($partnerId) {
+    'partner-a' => 'partner_a',
+    'partner-b' => 'partner_b',
+    default => 'default',
+};
+$dataWithSignature = WertScSigner::withCredential($credential)->sign($options);
+```
+
 ### Options
 | Property             | Required |   Type    | Description                                                                                                                                                        |
 |:--------------------|:--------:|:---------:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|

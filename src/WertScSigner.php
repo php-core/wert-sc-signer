@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PHPCore\WertScSigner;
 
+use PHPCore\WertScSigner\Laravel\CredentialManager;
+
 class WertScSigner
 {
     private const SC_KEYS = [
@@ -16,11 +18,48 @@ class WertScSigner
     ];
 
     /**
+     * The credential manager instance.
+     *
+     * @var CredentialManager|null
+     */
+    protected ?CredentialManager $credentialManager = null;
+
+    /**
+     * The currently selected credential name.
+     *
+     * @var string|null
+     */
+    protected ?string $selectedCredential = null;
+
+    /**
+     * Create a new WertScSigner instance.
+     *
+     * @param CredentialManager|null $credentialManager
+     */
+    public function __construct(?CredentialManager $credentialManager = null)
+    {
+        $this->credentialManager = $credentialManager;
+    }
+
+    /**
      * @return array<string>
      */
     public static function getScKeysList(): array
     {
         return [...self::SC_KEYS, 'signature'];
+    }
+
+    /**
+     * Select a credential to use for signing.
+     *
+     * @param string $credentialName
+     * @return self A new instance with the selected credential
+     */
+    public function withCredential(string $credentialName): self
+    {
+        $instance = clone $this;
+        $instance->selectedCredential = $credentialName;
+        return $instance;
     }
 
     private static function trimHexPrefix(string $str): string
@@ -37,6 +76,8 @@ class WertScSigner
     }
 
     /**
+     * Sign smart contract data (instance method with credential support).
+     *
      * @param array{
      *     address: string,
      *     commodity: string,
@@ -45,9 +86,43 @@ class WertScSigner
      *     sc_address: string,
      *     sc_input_data: string
      * } $options
+     * @param string|null $credentialName The credential name to use, or null to use selected/default
+     * @param string|null $privateKey Direct private key (overrides credential selection)
+     * @return array
      * @throws \InvalidArgumentException
      */
+    public function sign(array $options, ?string $credentialName = null, ?string $privateKey = null): array
+    {
+        // If private key is provided directly, use it
+        if ($privateKey !== null) {
+            return self::signSmartContractData($options, $privateKey);
+        }
+
+        // Determine which credential to use
+        $credentialToUse = $credentialName ?? $this->selectedCredential;
+
+        // Try to get private key from credential manager
+        if ($this->credentialManager !== null) {
+            $privateKey = $this->credentialManager->get($credentialToUse);
+        }
+
+        // Fall back to static method which handles config fallback
+        return self::signSmartContractData($options, $privateKey);
+    }
+
     /**
+     * Sign smart contract data (static method for backward compatibility).
+     *
+     * @param array{
+     *     address: string,
+     *     commodity: string,
+     *     commodity_amount: numeric-string|int|float,
+     *     network: string,
+     *     sc_address: string,
+     *     sc_input_data: string
+     * } $options
+     * @param string|null $privateKey
+     * @return array
      * @throws \InvalidArgumentException
      */
     public static function signSmartContractData(array $options, ?string $privateKey = null): array
@@ -56,7 +131,7 @@ class WertScSigner
         $missingKeys = array_diff(self::SC_KEYS, array_keys($options));
         if (!empty($missingKeys)) {
             throw new \InvalidArgumentException(
-                'All of following keys in options (as first argument) are required for signing: ' . 
+                'All of following keys in options (as first argument) are required for signing: ' .
                 implode(', ', array_map(fn($key) => "\"$key\"", self::SC_KEYS))
             );
         }
